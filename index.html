@@ -42,21 +42,30 @@
         canvas.height = 600;
 
         // Load and initialize the Python game
-        window.addEventListener("load", async function() {
-            await fetch("main.py")
-                .then(response => response.text())
-                .then(async text => {
-                    try {
-                        let pyodide = await loadPyodide();
-                        await pyodide.loadPackage("pygame");
-                        await pyodide.runPythonAsync(text);
-                        statusElement.style.display = "none";
-                    } catch (error) {
-                        statusElement.textContent = "Error: " + error.message;
-                    }
-                });
-        });
+        async function initGame() {
+            try {
+                statusElement.textContent = "Loading Pyodide...";
+                let pyodide = await loadPyodide();
+                
+                statusElement.textContent = "Loading Pygame...";
+                await pyodide.loadPackage("https://cdn.jsdelivr.net/pyodide/pygame-wasm@0.3.0/pygame_wasm-0.3.0-py3-none-any.whl");
+                
+                statusElement.textContent = "Loading game files...";
+                const response = await fetch("main.py");
+                const gameCode = await response.text();
+                
+                statusElement.textContent = "Starting game...";
+                await pyodide.runPythonAsync(gameCode);
+                
+                statusElement.style.display = "none";
+            } catch (error) {
+                statusElement.textContent = "Error: " + error.message;
+                console.error(error);
+            }
+        }
+
+        window.addEventListener("load", initGame);
     </script>
-    <script src="https://cdn.jsdelivr.net/pyodide/v0.22.1/full/pyodide.js"></script>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
 </body>
 </html> 

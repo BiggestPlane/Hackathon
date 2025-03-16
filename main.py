@@ -8,17 +8,42 @@ from PIL import Image, ImageSequence  # Add PIL import for GIF handling
 
 # Initialize Pygame with browser-friendly settings
 pygame.init()
+pygame.mixer.init()  # Initialize the sound mixer
+
+# Set up the display
+flags = pygame.SCALED
 if 'pyodide' in sys.modules:
     import platform
-    from pygame.display import set_mode
-    from pygame import FULLSCREEN
     if platform.system() == "Emscripten":
-        FULLSCREEN = 0x7FFFFFFF
+        flags = 0x7FFFFFFF  # Special flag for web version
+
+screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), flags)
+pygame.display.set_caption("Skibidi Shrek Swamp Showdown")
 
 # Constants
 WINDOW_WIDTH = 800
 WINDOW_HEIGHT = 600
 FPS = 60
+
+# Asset paths
+ASSET_DIR = os.path.join(os.path.dirname(__file__), 'assets')
+IMAGE_DIR = os.path.join(ASSET_DIR, 'images')
+SOUND_DIR = os.path.join(ASSET_DIR, 'sounds')
+
+# Load sound effects
+try:
+    PUNCH_SOUND = pygame.mixer.Sound(os.path.join(SOUND_DIR, 'punch.wav'))
+    KICK_SOUND = pygame.mixer.Sound(os.path.join(SOUND_DIR, 'kick.wav'))
+    FART_SOUND = pygame.mixer.Sound(os.path.join(SOUND_DIR, 'fart.wav'))
+    # Set volume for sounds
+    PUNCH_SOUND.set_volume(0.4)
+    KICK_SOUND.set_volume(0.4)
+    FART_SOUND.set_volume(0.3)
+except Exception as e:
+    print(f"Error loading sound effects: {e}")
+    PUNCH_SOUND = None
+    KICK_SOUND = None
+    FART_SOUND = None
 
 # Colors
 WHITE = (255, 255, 255)
@@ -47,9 +72,6 @@ if 'pyodide' in sys.modules:
     flags = FULLSCREEN
 screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), flags)
 pygame.display.set_caption("Skibidi Shrek Swamp Showdown")
-
-# Asset paths
-ASSET_DIR = os.path.join(os.path.dirname(__file__), 'assets', 'images')
 
 # Create a class to handle GIF animations
 class AnimatedSprite:
@@ -102,7 +124,7 @@ class AnimatedSprite:
 # Load images
 def load_image(filename, scale=1.0):
     try:
-        path = os.path.join(ASSET_DIR, filename)
+        path = os.path.join(IMAGE_DIR, filename)
         print(f"Attempting to load image from: {path}")
         if not os.path.exists(path):
             print(f"File not found: {path}")
@@ -227,10 +249,10 @@ def create_toilet_sprite():
 # Load and scale sprites
 try:
     print("Loading sprites...")
-    SHREK_ANIMATION = AnimatedSprite(os.path.join(ASSET_DIR, 'Bigblackshrek.gif'), 2.5)
+    SHREK_ANIMATION = AnimatedSprite(os.path.join(IMAGE_DIR, 'Bigblackshrek.gif'), 2.5)
     SHREK_RIGHT = SHREK_ANIMATION.get_current_frame() if SHREK_ANIMATION.frames else create_shrek_sprite()
     
-    TOILET_ANIMATION = AnimatedSprite(os.path.join(ASSET_DIR, 'Skibidi toilets.gif'), 2.0)
+    TOILET_ANIMATION = AnimatedSprite(os.path.join(IMAGE_DIR, 'Skibidi toilets.gif'), 2.0)
     TOILET_SPRITE = TOILET_ANIMATION.get_current_frame() if TOILET_ANIMATION.frames else create_toilet_sprite()
     
     ONION_SPRITE = load_image('pixel_onion.png', 0.2)
@@ -1247,7 +1269,10 @@ async def main():
             # Handle attacks (only if not riding Donkey)
             if not shrek.donkey:
                 # Get keyboard state and handle punch
-                if keys[pygame.K_q] and shrek.punch_cooldown <= 0:  # Changed from mouse_buttons[0] to keys[pygame.K_q]
+                if keys[pygame.K_q] and shrek.punch_cooldown <= 0:
+                    # Play punch sound
+                    if 'PUNCH_SOUND' in globals() and PUNCH_SOUND:
+                        PUNCH_SOUND.play()
                     # Allow hitting both boss and minions
                     if boss:
                         # First check boss
@@ -1272,6 +1297,9 @@ async def main():
                     else:  # No boss, just minions
                         score += shrek.punch(enemies)
                 if keys[pygame.K_r] and shrek.kick_cooldown <= 0:
+                    # Play kick sound
+                    if 'KICK_SOUND' in globals() and KICK_SOUND:
+                        KICK_SOUND.play()
                     if boss:
                         # First check boss
                         boss_hit = False
@@ -1292,6 +1320,9 @@ async def main():
                     else:
                         score += shrek.kick(enemies)
                 if keys[pygame.K_e] and shrek.fart_cooldown <= 0:
+                    # Play fart sound
+                    if 'FART_SOUND' in globals() and FART_SOUND:
+                        FART_SOUND.play()
                     fart_clouds.append(FartCloud(shrek.x + shrek.width/2, shrek.y + shrek.height/2))
                     shrek.fart_cooldown = 45  # Reduced from 60 to 45
 
