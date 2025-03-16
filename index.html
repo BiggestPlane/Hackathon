@@ -47,8 +47,9 @@
                 statusElement.textContent = "Loading Pyodide...";
                 let pyodide = await loadPyodide();
                 
-                statusElement.textContent = "Loading Pygame...";
-                await pyodide.loadPackage("https://cdn.jsdelivr.net/pyodide/pygame-wasm@0.3.0/pygame_wasm-0.3.0-py3-none-any.whl");
+                statusElement.textContent = "Loading dependencies...";
+                await pyodide.loadPackage(["numpy"]);
+                await pyodide.loadPackage("pygame");
                 
                 statusElement.textContent = "Loading game files...";
                 const response = await fetch("main.py");

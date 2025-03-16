@@ -15,7 +15,7 @@ flags = pygame.SCALED
 if 'pyodide' in sys.modules:
     import platform
     if platform.system() == "Emscripten":
-        flags = 0x7FFFFFFF  # Special flag for web version
+        flags = pygame.RESIZABLE
 
 screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), flags)
 pygame.display.set_caption("Skibidi Shrek Swamp Showdown")

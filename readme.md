@@ -1,1 +1,1 @@
-https://static.wikia.nocookie.net/d68a96aa-a008-4139-8882-84f295a36bcd
+https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRelk-hQKpotheeeXc7aMFYDF9kntcgqwLhlQ&s
