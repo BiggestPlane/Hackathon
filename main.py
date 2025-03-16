@@ -505,7 +505,7 @@ class GunnerSkibidi(SkibidiToilet):
         super().draw(screen)
         # Draw projectiles
         for proj in self.projectiles:
-            pygame.draw.circle(screen, (100, 200, 255), 
+            pygame.draw.circle(screen, BROWN, 
                              (int(proj['x']), int(proj['y'])), 5)
 
 class SkibidiBoss(SkibidiToilet):
