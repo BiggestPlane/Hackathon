@@ -4,6 +4,7 @@ import math
 import asyncio
 import os
 import sys
+from PIL import Image, ImageSequence  # Add PIL import for GIF handling
 
 # Initialize Pygame with browser-friendly settings
 pygame.init()
@@ -47,6 +48,54 @@ pygame.display.set_caption("Skibidi Shrek Swamp Showdown")
 
 # Asset paths
 ASSET_DIR = os.path.join(os.path.dirname(__file__), 'assets', 'images')
+
+# Create a class to handle GIF animations
+class AnimatedSprite:
+    def __init__(self, gif_path, scale=1.0):
+        self.frames = []
+        self.current_frame = 0
+        self.frame_delay = 0
+        self.frame_timer = 0
+        
+        try:
+            gif = Image.open(gif_path)
+            self.frame_delay = gif.info.get('duration', 100)  # Default to 100ms if not specified
+            
+            for frame in ImageSequence.Iterator(gif):
+                # Convert PIL image to Pygame surface
+                frame_rgb = frame.convert('RGBA')
+                frame_bytes = frame_rgb.tobytes()
+                size = frame_rgb.size
+                pygame_frame = pygame.image.fromstring(frame_bytes, size, 'RGBA')
+                
+                # Scale if needed
+                if scale != 1.0:
+                    new_width = int(size[0] * scale)
+                    new_height = int(size[1] * scale)
+                    pygame_frame = pygame.transform.scale(pygame_frame, (new_width, new_height))
+                
+                self.frames.append(pygame_frame)
+            
+            print(f"Loaded {len(self.frames)} frames from {gif_path}")
+        except Exception as e:
+            print(f"Error loading GIF {gif_path}: {e}")
+            self.frames = None
+    
+    def get_current_frame(self):
+        if not self.frames:
+            return None
+        return self.frames[self.current_frame]
+    
+    def update(self, dt):
+        if not self.frames:
+            return None
+        
+        self.frame_timer += dt
+        if self.frame_timer >= self.frame_delay:
+            self.frame_timer = 0
+            self.current_frame = (self.current_frame + 1) % len(self.frames)
+        
+        return self.get_current_frame()
 
 # Load images
 def load_image(filename, scale=1.0):
@@ -176,18 +225,20 @@ def create_toilet_sprite():
 # Load and scale sprites
 try:
     print("Loading sprites...")
-    SHREK_RIGHT = load_image('Bigblackshrek.gif', 2.5)  # Increased from 2.0 to 2.5
-    if SHREK_RIGHT:
-        print("Shrek sprite loaded successfully")
-    TOILET_SPRITE = load_image('Skibidi toilets.gif', 2.0)  # Increased from 1.6 to 2.0
-    if TOILET_SPRITE:
-        print("Toilet sprite loaded successfully")
-    ONION_SPRITE = load_image('pixel_onion.png', 0.2)  # Keeping onion size the same
+    SHREK_ANIMATION = AnimatedSprite(os.path.join(ASSET_DIR, 'Bigblackshrek.gif'), 2.5)
+    SHREK_RIGHT = SHREK_ANIMATION.get_current_frame() if SHREK_ANIMATION.frames else create_shrek_sprite()
+    
+    TOILET_ANIMATION = AnimatedSprite(os.path.join(ASSET_DIR, 'Skibidi toilets.gif'), 2.0)
+    TOILET_SPRITE = TOILET_ANIMATION.get_current_frame() if TOILET_ANIMATION.frames else create_toilet_sprite()
+    
+    ONION_SPRITE = load_image('pixel_onion.png', 0.2)
     if ONION_SPRITE:
         print("Onion sprite loaded successfully")
+    
     BACKGROUND_IMAGE = load_image('Grass Background.png')
     if BACKGROUND_IMAGE:
         print("Background loaded successfully")
+    
     SWAMP_BACKGROUND = load_image('Swamp.jpg')
     if SWAMP_BACKGROUND:
         print("Swamp background loaded successfully")
@@ -213,7 +264,7 @@ try:
     # Scale background to window size if loaded successfully
     if BACKGROUND_IMAGE:
         BACKGROUND_IMAGE = pygame.transform.scale(BACKGROUND_IMAGE, (WINDOW_WIDTH, WINDOW_HEIGHT))
-    
+
 except Exception as e:
     print(f"Error loading sprites: {e}")
     SHREK_RIGHT = create_shrek_sprite()
@@ -350,6 +401,7 @@ class SkibidiToilet:
         self.hit_flash = 0
         self.target_player = None
         self.color = (255, 255, 255)  # Pure white for normal toilets
+        self.animation = TOILET_ANIMATION
 
     def apply_knockback(self, force_x, force_y):
         self.velocity_x += force_x
@@ -377,11 +429,15 @@ class SkibidiToilet:
             self.hit_flash -= 1
 
     def draw(self, screen):
+        # Update animation frame if available
+        if self.animation and self.animation.frames:
+            self.sprite = self.animation.update(1000/FPS)  # Convert FPS to milliseconds
+            
         # Create a colored version of the sprite
         colored_sprite = self.sprite.copy()
         # Apply color tint more strongly
         color_surface = pygame.Surface(colored_sprite.get_size(), pygame.SRCALPHA)
-        color_surface.fill((*self.color, 255))  # Changed from 128 to 255 for full opacity
+        color_surface.fill((*self.color, 255))
         colored_sprite.blit(color_surface, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
         
         if self.hit_flash > 0 and self.hit_flash % 2 == 0:
@@ -513,6 +569,7 @@ class SuperSkibidiBoss(SkibidiBoss):
         self.color = (255, 100, 255)  # Purple color for super boss
         self.missiles = []
         self.missile_cooldown = 0
+        self.max_fragments = 32  # Maximum number of fragments allowed
 
     def update(self, player):
         super().move()
@@ -526,18 +583,28 @@ class SuperSkibidiBoss(SkibidiBoss):
             missile['lifetime'] -= 1
             if missile['lifetime'] <= 0:
                 self.missiles.remove(missile)
-                # Create explosion
-                for _ in range(8):
-                    angle = random.uniform(0, 2 * math.pi)
-                    speed = random.uniform(3, 5)
-                    self.missiles.append({
-                        'x': missile['x'],
-                        'y': missile['y'],
-                        'dx': math.cos(angle) * speed,
-                        'dy': math.sin(angle) * speed,
-                        'lifetime': 30,
-                        'is_fragment': True
-                    })
+                # Only create explosion if we won't exceed max fragments
+                if not missile['is_fragment'] and len([m for m in self.missiles if m['is_fragment']]) < self.max_fragments:
+                    # Create explosion with fewer fragments (4 instead of 8)
+                    for _ in range(4):
+                        angle = random.uniform(0, 2 * math.pi)
+                        speed = random.uniform(3, 5)
+                        self.missiles.append({
+                            'x': missile['x'],
+                            'y': missile['y'],
+                            'dx': math.cos(angle) * speed,
+                            'dy': math.sin(angle) * speed,
+                            'lifetime': 30,
+                            'is_fragment': True
+                        })
+        
+        # Remove old fragments if we exceed the maximum
+        fragments = [m for m in self.missiles if m['is_fragment']]
+        if len(fragments) > self.max_fragments:
+            # Remove oldest fragments
+            fragments.sort(key=lambda x: x['lifetime'])
+            for fragment in fragments[self.max_fragments:]:
+                self.missiles.remove(fragment)
         
         actions = []
         if self.attack_cooldown <= 0:
@@ -570,9 +637,9 @@ class SuperSkibidiBoss(SkibidiBoss):
                         })
                     self.missile_cooldown = 60
             else:
-                # Spread shot
-                for i in range(5):
-                    angle = -0.4 + i * 0.2
+                # Spread shot with fewer bullets (3 instead of 5)
+                for i in range(3):
+                    angle = -0.3 + i * 0.3
                     dx = math.cos(angle) * 6
                     dy = math.sin(angle) * 6
                     self.missiles.append({
@@ -847,7 +914,9 @@ class Shrek:
                     dx = enemy.x - self.x
                     dy = enemy.y - self.y
                     dist = math.sqrt(dx * dx + dy * dy) or 1
-                    enemy.apply_knockback(dx/dist * 20, dy/dist * 20)  # Reduced from 40 to 20
+                    # Reduce knockback, especially for bosses
+                    knockback_force = 10 if isinstance(enemy, (SkibidiBoss, SuperSkibidiBoss)) else 15
+                    enemy.apply_knockback(dx/dist * knockback_force, dy/dist * knockback_force)
                     if enemy.health <= 0:
                         enemies.remove(enemy)
                         damage_dealt += 25
@@ -870,7 +939,9 @@ class Shrek:
                     dx = enemy.x - self.x
                     dy = enemy.y - self.y
                     dist = math.sqrt(dx * dx + dy * dy) or 1
-                    enemy.apply_knockback(dx/dist * 25, dy/dist * 25)  # Reduced from 50 to 25
+                    # Reduce knockback, especially for bosses
+                    knockback_force = 12 if isinstance(enemy, (SkibidiBoss, SuperSkibidiBoss)) else 20
+                    enemy.apply_knockback(dx/dist * knockback_force, dy/dist * knockback_force)
                     if enemy.health <= 0:
                         enemies.remove(enemy)
                         damage_dealt += 25
@@ -1042,7 +1113,7 @@ async def main():
             start_x = WINDOW_WIDTH//2 - menu_font.size("Press SPACE to Start")[0]//2
             controls1_x = WINDOW_WIDTH//2 - menu_font.size("Movement: WASD or Arrow Keys")[0]//2
             controls2_x = WINDOW_WIDTH//2 - menu_font.size("SPACE: Use Donkey when Ready")[0]//2
-            attacks_x = WINDOW_WIDTH//2 - menu_font.size("Q: Punch  R: Kick  E: Fart  P: Pause")[0]//2
+            attacks_x = WINDOW_WIDTH//2 - menu_font.size("Left Click: Punch  R: Kick  E: Fart  P: Pause")[0]//2
             
             # Draw all menu text with outlines
             draw_outlined_text(screen, "Skibidi Shrek", title_font, title_x, WINDOW_HEIGHT//4)
@@ -1050,7 +1121,7 @@ async def main():
             draw_outlined_text(screen, "Press SPACE to Start", menu_font, start_x, WINDOW_HEIGHT//2 + 50)
             draw_outlined_text(screen, "Movement: WASD or Arrow Keys", menu_font, controls1_x, WINDOW_HEIGHT//2 + 100)
             draw_outlined_text(screen, "SPACE: Use Donkey when Ready", menu_font, controls2_x, WINDOW_HEIGHT//2 + 140)
-            draw_outlined_text(screen, "Q: Punch  R: Kick  E: Fart  P: Pause", menu_font, attacks_x, WINDOW_HEIGHT//2 + 180)
+            draw_outlined_text(screen, "Left Click: Punch  R: Kick  E: Fart  P: Pause", menu_font, attacks_x, WINDOW_HEIGHT//2 + 180)
         
         elif game_state == WAVE_ANNOUNCEMENT:
             wave_announcement_timer += 1
@@ -1144,7 +1215,9 @@ async def main():
 
             # Handle attacks (only if not riding Donkey)
             if not shrek.donkey:
-                if keys[pygame.K_q] and shrek.punch_cooldown <= 0:
+                # Get mouse state
+                mouse_buttons = pygame.mouse.get_pressed()
+                if mouse_buttons[0] and shrek.punch_cooldown <= 0:  # Left mouse button
                     # Allow hitting both boss and minions
                     if boss:
                         # First check boss
@@ -1280,13 +1353,24 @@ async def main():
                 if cloud.lifetime <= 0:
                     fart_clouds.remove(cloud)
                 else:
-                    # Check boss damage from fart
+                    # Check boss damage from fart and block missiles
                     if boss:
+                        # Check boss missiles
+                        if isinstance(boss, SuperSkibidiBoss):
+                            for missile in boss.missiles[:]:
+                                dx = missile['x'] - cloud.x
+                                dy = missile['y'] - cloud.y
+                                distance = math.sqrt(dx*dx + dy*dy)
+                                if distance < cloud.radius:
+                                    boss.missiles.remove(missile)  # Destroy missile
+                                    continue
+
+                        # Normal boss damage
                         dx = boss.x + boss.width/2 - cloud.x
                         dy = boss.y + boss.height/2 - cloud.y
                         distance = math.sqrt(dx*dx + dy*dy)
                         if distance < cloud.radius:
-                            boss.health -= 1  # Reduced damage per tick for boss
+                            boss.health -= 1
                             boss.hit_flash = 10
                             knockback_force = 15
                             boss.apply_knockback(dx/distance * knockback_force * 0.2, dy/distance * knockback_force * 0.2)
@@ -1294,13 +1378,24 @@ async def main():
                                 boss = None
                                 score += 1000
                     
-                    # Check minion damage from fart
+                    # Check minion damage from fart and block projectiles
                     for enemy in enemies[:]:
+                        # Check gunner projectiles
+                        if isinstance(enemy, GunnerSkibidi):
+                            for proj in enemy.projectiles[:]:
+                                dx = proj['x'] - cloud.x
+                                dy = proj['y'] - cloud.y
+                                distance = math.sqrt(dx*dx + dy*dy)
+                                if distance < cloud.radius:
+                                    enemy.projectiles.remove(proj)  # Destroy projectile
+                                    continue
+
+                        # Normal enemy damage
                         dx = enemy.x + enemy.width/2 - cloud.x
                         dy = enemy.y + enemy.height/2 - cloud.y
                         distance = math.sqrt(dx*dx + dy*dy)
                         if distance < cloud.radius:
-                            enemy.health -= 1  # Reduced damage per tick
+                            enemy.health -= 1
                             enemy.hit_flash = 10
                             knockback_force = 15
                             enemy.apply_knockback(dx/distance * knockback_force * 0.2, dy/distance * knockback_force * 0.2)
@@ -1359,8 +1454,8 @@ async def main():
                 screen.blit(shadow, (12, 92))
                 screen.blit(text, (10, 90))
 
-            # Draw controls help
-            controls_text = font.render("Q: Punch  R: Kick  E: Fart", True, WHITE)
+            # Draw controls help (update the text to show mouse controls)
+            controls_text = font.render("Left Click: Punch  R: Kick  E: Fart", True, WHITE)
             screen.blit(controls_text, (10, WINDOW_HEIGHT - 30))
 
             # Draw pause button in top right corner
@@ -1416,7 +1511,7 @@ async def main():
             resume_text = font.render("Press P to Resume", True, WHITE)
             controls_reminder = font.render("Controls:", True, WHITE)
             move_text = font.render("WASD/Arrows - Move", True, WHITE)
-            attack_text = font.render("Q - Punch  R - Kick  E - Fart", True, WHITE)
+            attack_text = font.render("Left Click - Punch  R - Kick  E - Fart", True, WHITE)
             donkey_text = font.render("Hold SPACE - Charge Donkey", True, WHITE)
 
             # Center and position all text elements
