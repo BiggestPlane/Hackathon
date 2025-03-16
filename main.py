@@ -549,23 +549,24 @@ class GunnerSkibidi(SkibidiToilet):
 class SkibidiBoss(SkibidiToilet):
     def __init__(self):
         super().__init__()
-        self.width = 150  # Increased from 100 to 150
-        self.height = 180  # Increased from 120 to 180
+        self.width = 200  # Increased from 150 to 200
+        self.height = 240  # Increased from 180 to 240
         self.health = 200
         self.max_health = 200
         self.base_speed = 1.5
         self.attack_cooldown = 0
         self.attack_pattern = 0
-        self.sprite = pygame.transform.scale(TOILET_SPRITE, (150, 180))  # Match new dimensions
+        self.sprite = pygame.transform.scale(TOILET_SPRITE, (200, 240))  # Match new dimensions
         self.color = (255, 50, 50)  # More intense red for first boss
         self.knockback_resistance = 0.95  # Added higher knockback resistance
-        # Add crown to show it's a boss
+        self.name = "Evil Toilet"  # Added boss name
+        # Update crown points for larger size
         self.crown_points = [
-            (self.width//2 - 30, -20),  # Left point
-            (self.width//2 - 20, -30),  # Left peak
-            (self.width//2, -20),      # Middle valley
-            (self.width//2 + 20, -30),  # Right peak
-            (self.width//2 + 30, -20)   # Right point
+            (self.width//2 - 40, -25),  # Left point
+            (self.width//2 - 30, -40),  # Left peak
+            (self.width//2, -25),      # Middle valley
+            (self.width//2 + 30, -40),  # Right peak
+            (self.width//2 + 40, -25)   # Right point
         ]
 
     def update(self, player):
@@ -602,6 +603,17 @@ class SkibidiBoss(SkibidiToilet):
         bar_width = 400
         bar_height = 20
         health_percent = self.health / self.max_health
+        
+        # Draw boss name above health bar
+        name_font = pygame.font.Font(None, 48)  # Larger font for boss name
+        name_text = name_font.render(self.name, True, WHITE)
+        name_shadow = name_font.render(self.name, True, BLACK)
+        
+        # Draw name with shadow effect
+        screen.blit(name_shadow, (WINDOW_WIDTH//2 - name_text.get_width()//2 + 2, WINDOW_HEIGHT - 62))
+        screen.blit(name_text, (WINDOW_WIDTH//2 - name_text.get_width()//2, WINDOW_HEIGHT - 64))
+        
+        # Draw health bar
         pygame.draw.rect(screen, BLACK, (WINDOW_WIDTH//2 - bar_width//2 - 2, WINDOW_HEIGHT - 30 - 2, 
                                        bar_width + 4, bar_height + 4))
         pygame.draw.rect(screen, RED, (WINDOW_WIDTH//2 - bar_width//2, WINDOW_HEIGHT - 30, 
@@ -612,46 +624,51 @@ class SkibidiBoss(SkibidiToilet):
 class SuperSkibidiBoss(SkibidiBoss):
     def __init__(self):
         super().__init__()
-        self.width = 200  # Even larger than first boss
-        self.height = 240
+        self.width = 300  # Increased from 200 to 300
+        self.height = 360  # Increased from 240 to 360
         self.health = 400
         self.max_health = 400
         self.base_speed = 2.0
-        self.sprite = pygame.transform.scale(TOILET_SPRITE, (200, 240))
+        self.sprite = pygame.transform.scale(TOILET_SPRITE, (300, 360))  # Match new dimensions
         self.color = (200, 50, 255)  # More intense purple color
         self.missiles = []
         self.missile_cooldown = 0
         self.max_fragments = 32
-        self.knockback_resistance = 0.97  # Added even higher knockback resistance for final boss
+        self.knockback_resistance = 0.97
+        self.name = "Skibidi Sigma Toilet"  # Added boss name
         # Update crown points for larger size
         self.crown_points = [
-            (self.width//2 - 40, -25),  # Left point
-            (self.width//2 - 30, -40),  # Left peak
-            (self.width//2, -25),      # Middle valley
-            (self.width//2 + 30, -40),  # Right peak
-            (self.width//2 + 40, -25)   # Right point
+            (self.width//2 - 60, -35),  # Left point
+            (self.width//2 - 45, -55),  # Left peak
+            (self.width//2, -35),      # Middle valley
+            (self.width//2 + 45, -55),  # Right peak
+            (self.width//2 + 60, -35)   # Right point
         ]
 
     def draw(self, screen):
         super().draw(screen)  # Draw the main boss and crown
-
-        # Draw missiles with special effects
-        for missile in self.missiles:
-            if missile['is_fragment']:
-                # Draw smaller explosion fragments with glow
-                glow_radius = 6
-                for r in range(glow_radius, 0, -2):
-                    alpha = int(100 * (r / glow_radius))
-                    pygame.draw.circle(screen, (*self.color, alpha), 
-                                    (int(missile['x']), int(missile['y'])), r)
-            else:
-                # Draw missiles with trail effect
-                trail_length = 5
-                for i in range(trail_length):
-                    alpha = int(200 * ((trail_length - i) / trail_length))
-                    pos_x = int(missile['x'] - missile['dx'] * i * 0.5)
-                    pos_y = int(missile['y'] - missile['dy'] * i * 0.5)
-                    pygame.draw.circle(screen, (*self.color, alpha), (pos_x, pos_y), 6 - i)
+        
+        # Draw boss health bar at the bottom of the screen
+        bar_width = 400
+        bar_height = 20
+        health_percent = self.health / self.max_health
+        
+        # Draw boss name above health bar
+        name_font = pygame.font.Font(None, 48)  # Larger font for boss name
+        name_text = name_font.render(self.name, True, WHITE)
+        name_shadow = name_font.render(self.name, True, BLACK)
+        
+        # Draw name with shadow effect
+        screen.blit(name_shadow, (WINDOW_WIDTH//2 - name_text.get_width()//2 + 2, WINDOW_HEIGHT - 62))
+        screen.blit(name_text, (WINDOW_WIDTH//2 - name_text.get_width()//2, WINDOW_HEIGHT - 64))
+        
+        # Draw health bar
+        pygame.draw.rect(screen, BLACK, (WINDOW_WIDTH//2 - bar_width//2 - 2, WINDOW_HEIGHT - 30 - 2, 
+                                       bar_width + 4, bar_height + 4))
+        pygame.draw.rect(screen, RED, (WINDOW_WIDTH//2 - bar_width//2, WINDOW_HEIGHT - 30, 
+                                     bar_width, bar_height))
+        pygame.draw.rect(screen, GREEN, (WINDOW_WIDTH//2 - bar_width//2, WINDOW_HEIGHT - 30, 
+                                       int(bar_width * health_percent), bar_height))
 
 class Donkey:
     def __init__(self, x, y):
@@ -1074,11 +1091,12 @@ async def main():
                 elif game_state == TITLE_SCREEN and event.key == pygame.K_SPACE:
                     game_state = WAVE_ANNOUNCEMENT
                     start_wave(current_wave)
-                elif game_state == GAME_OVER and event.key == pygame.K_SPACE:
+                elif (game_state == GAME_OVER or game_state == VICTORY) and event.key == pygame.K_SPACE:
                     # Reset game
                     shrek = Shrek()
                     enemies = []
                     fart_clouds = []
+                    onions = []
                     score = 0
                     current_wave = 1
                     boss = None
@@ -1125,7 +1143,7 @@ async def main():
             subtitle_x = WINDOW_WIDTH//2 - title_font.size("Swamp Showdown")[0]//2
             start_x = WINDOW_WIDTH//2 - menu_font.size("Press SPACE to Start")[0]//2
             controls1_x = WINDOW_WIDTH//2 - menu_font.size("Movement: WASD or Arrow Keys")[0]//2
-            controls2_x = WINDOW_WIDTH//2 - menu_font.size("SPACE: Use Donkey when Ready")[0]//2
+            controls2_x = WINDOW_WIDTH//2 - menu_font.size("SPACE: Summon Donkey when Meter Full")[0]//2
             attacks_x = WINDOW_WIDTH//2 - menu_font.size("Q: Punch  R: Kick  E: Fart  P: Pause")[0]//2
             
             # Draw all menu text with outlines
@@ -1133,7 +1151,7 @@ async def main():
             draw_outlined_text(screen, "Swamp Showdown", title_font, subtitle_x, WINDOW_HEIGHT//4 + 80)
             draw_outlined_text(screen, "Press SPACE to Start", menu_font, start_x, WINDOW_HEIGHT//2 + 50)
             draw_outlined_text(screen, "Movement: WASD or Arrow Keys", menu_font, controls1_x, WINDOW_HEIGHT//2 + 100)
-            draw_outlined_text(screen, "SPACE: Use Donkey when Ready", menu_font, controls2_x, WINDOW_HEIGHT//2 + 140)
+            draw_outlined_text(screen, "SPACE: Summon Donkey when Meter Full", menu_font, controls2_x, WINDOW_HEIGHT//2 + 140)
             draw_outlined_text(screen, "Q: Punch  R: Kick  E: Fart  P: Pause", menu_font, attacks_x, WINDOW_HEIGHT//2 + 180)
         
         elif game_state == WAVE_ANNOUNCEMENT:
@@ -1551,7 +1569,7 @@ async def main():
             controls_reminder = font.render("Controls:", True, WHITE)
             move_text = font.render("WASD/Arrows - Move", True, WHITE)
             attack_text = font.render("Q - Punch  R - Kick  E - Fart", True, WHITE)
-            donkey_text = font.render("Hold SPACE - Charge Donkey", True, WHITE)
+            donkey_text = font.render("SPACE - Summon Donkey when Meter Full", True, WHITE)
 
             # Center and position all text elements
             center_x = WINDOW_WIDTH // 2
