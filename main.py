@@ -26,6 +26,8 @@ BLACK = (0, 0, 0)
 GREEN = (34, 139, 34)
 RED = (255, 0, 0)
 BROWN = (139, 69, 19)
+DARK_BROWN = (101, 67, 33)  # Darker brown for poop
+LIGHT_BROWN = (185, 122, 87)  # Lighter brown for poop highlights
 PURPLE = (128, 0, 128)  # For portal effects
 GOLD = (255, 215, 0)    # For golden onions
 LIGHT_BLUE = (135, 206, 250)  # For blue onions
@@ -472,7 +474,28 @@ class GunnerSkibidi(SkibidiToilet):
         self.health = 40  # More health
         self.color = (255, 128, 128)  # Light red for gunner toilets
         self.shoot_cooldown = 0
+        self.reload_time = 150  # Increased from 90 to 150 (2.5 seconds between shots)
         self.projectiles = []
+
+    def draw_poop_emoji(self, screen, x, y, size):
+        # Draw main poop shape
+        pygame.draw.circle(screen, DARK_BROWN, (int(x), int(y)), size)
+        # Add highlights
+        pygame.draw.circle(screen, LIGHT_BROWN, (int(x - size/3), int(y - size/3)), size//3)
+        pygame.draw.circle(screen, LIGHT_BROWN, (int(x + size/3), int(y - size/3)), size//4)
+        # Add eyes (small white circles with black dots)
+        eye_size = max(2, size//3)
+        pygame.draw.circle(screen, WHITE, (int(x - size/4), int(y - size/6)), eye_size)
+        pygame.draw.circle(screen, WHITE, (int(x + size/4), int(y - size/6)), eye_size)
+        pygame.draw.circle(screen, BLACK, (int(x - size/4), int(y - size/6)), max(1, eye_size//2))
+        pygame.draw.circle(screen, BLACK, (int(x + size/4), int(y - size/6)), max(1, eye_size//2))
+        # Add smile
+        smile_points = [
+            (int(x - size/3), int(y + size/4)),
+            (int(x), int(y + size/2)),
+            (int(x + size/3), int(y + size/4))
+        ]
+        pygame.draw.lines(screen, BLACK, False, smile_points, max(1, size//4))
 
     def move(self):
         super().move()
@@ -485,11 +508,12 @@ class GunnerSkibidi(SkibidiToilet):
                 self.projectiles.append({
                     'x': self.x + self.width/2,
                     'y': self.y + self.height/2,
-                    'dx': dx/dist * 5,
-                    'dy': dy/dist * 5,
-                    'lifetime': 120
+                    'dx': dx/dist * 3.5,
+                    'dy': dy/dist * 3.5,
+                    'lifetime': 120,
+                    'size': 10
                 })
-                self.shoot_cooldown = 90  # Shoot every 1.5 seconds
+                self.shoot_cooldown = self.reload_time  # Use the new reload_time
         
         self.shoot_cooldown = max(0, self.shoot_cooldown - 1)
         
@@ -498,28 +522,51 @@ class GunnerSkibidi(SkibidiToilet):
             proj['x'] += proj['dx']
             proj['y'] += proj['dy']
             proj['lifetime'] -= 1
+            
+            # Check collision with player if not riding Donkey
+            if self.target_player and not self.target_player.donkey:
+                dx = proj['x'] - (self.target_player.x + self.target_player.width/2)
+                dy = proj['y'] - (self.target_player.y + self.height/2)
+                dist = math.sqrt(dx * dx + dy * dy)
+                if dist < 30:  # Hit radius
+                    self.target_player.health -= 10  # Damage amount
+                    self.target_player.poop_stain_timer = 120  # 2 seconds at 60 FPS
+                    # Apply knockback
+                    knockback_force = 8
+                    self.target_player.apply_knockback(dx/dist * knockback_force, dy/dist * knockback_force)
+                    self.projectiles.remove(proj)
+                    continue
+            
             if proj['lifetime'] <= 0:
                 self.projectiles.remove(proj)
 
     def draw(self, screen):
         super().draw(screen)
-        # Draw projectiles
+        # Draw projectiles as poop emojis
         for proj in self.projectiles:
-            pygame.draw.circle(screen, BROWN, 
-                             (int(proj['x']), int(proj['y'])), 5)
+            self.draw_poop_emoji(screen, proj['x'], proj['y'], proj['size'])
 
 class SkibidiBoss(SkibidiToilet):
     def __init__(self):
         super().__init__()
-        self.width = 100
-        self.height = 120
+        self.width = 150  # Increased from 100 to 150
+        self.height = 180  # Increased from 120 to 180
         self.health = 200
         self.max_health = 200
         self.base_speed = 1.5
         self.attack_cooldown = 0
         self.attack_pattern = 0
-        self.sprite = pygame.transform.scale(TOILET_SPRITE, (100, 120))
-        self.color = (255, 150, 150)  # Light red color for first boss
+        self.sprite = pygame.transform.scale(TOILET_SPRITE, (150, 180))  # Match new dimensions
+        self.color = (255, 50, 50)  # More intense red for first boss
+        self.knockback_resistance = 0.95  # Added higher knockback resistance
+        # Add crown to show it's a boss
+        self.crown_points = [
+            (self.width//2 - 30, -20),  # Left point
+            (self.width//2 - 20, -30),  # Left peak
+            (self.width//2, -20),      # Middle valley
+            (self.width//2 + 20, -30),  # Right peak
+            (self.width//2 + 30, -20)   # Right point
+        ]
 
     def update(self, player):
         super().move()
@@ -546,6 +593,11 @@ class SkibidiBoss(SkibidiToilet):
 
     def draw(self, screen):
         super().draw(screen)
+        # Draw crown on top
+        crown_surface = pygame.Surface((self.width, 40), pygame.SRCALPHA)
+        pygame.draw.polygon(crown_surface, (255, 215, 0), self.crown_points)  # Gold crown
+        screen.blit(crown_surface, (self.x, self.y))
+        
         # Draw boss health bar at the bottom of the screen
         bar_width = 400
         bar_height = 20
@@ -560,112 +612,46 @@ class SkibidiBoss(SkibidiToilet):
 class SuperSkibidiBoss(SkibidiBoss):
     def __init__(self):
         super().__init__()
+        self.width = 200  # Even larger than first boss
+        self.height = 240
         self.health = 400
         self.max_health = 400
         self.base_speed = 2.0
-        self.width = 120
-        self.height = 140
-        self.sprite = pygame.transform.scale(TOILET_SPRITE, (120, 140))
-        self.color = (255, 100, 255)  # Purple color for super boss
+        self.sprite = pygame.transform.scale(TOILET_SPRITE, (200, 240))
+        self.color = (200, 50, 255)  # More intense purple color
         self.missiles = []
         self.missile_cooldown = 0
-        self.max_fragments = 32  # Maximum number of fragments allowed
-
-    def update(self, player):
-        super().move()
-        self.attack_cooldown = max(0, self.attack_cooldown - 1)
-        self.missile_cooldown = max(0, self.missile_cooldown - 1)
-        
-        # Update missiles
-        for missile in self.missiles[:]:
-            missile['x'] += missile['dx']
-            missile['y'] += missile['dy']
-            missile['lifetime'] -= 1
-            if missile['lifetime'] <= 0:
-                self.missiles.remove(missile)
-                # Only create explosion if we won't exceed max fragments
-                if not missile['is_fragment'] and len([m for m in self.missiles if m['is_fragment']]) < self.max_fragments:
-                    # Create explosion with fewer fragments (4 instead of 8)
-                    for _ in range(4):
-                        angle = random.uniform(0, 2 * math.pi)
-                        speed = random.uniform(3, 5)
-                        self.missiles.append({
-                            'x': missile['x'],
-                            'y': missile['y'],
-                            'dx': math.cos(angle) * speed,
-                            'dy': math.sin(angle) * speed,
-                            'lifetime': 30,
-                            'is_fragment': True
-                        })
-        
-        # Remove old fragments if we exceed the maximum
-        fragments = [m for m in self.missiles if m['is_fragment']]
-        if len(fragments) > self.max_fragments:
-            # Remove oldest fragments
-            fragments.sort(key=lambda x: x['lifetime'])
-            for fragment in fragments[self.max_fragments:]:
-                self.missiles.remove(fragment)
-        
-        actions = []
-        if self.attack_cooldown <= 0:
-            self.attack_pattern = (self.attack_pattern + 1) % 4
-            if self.attack_pattern == 0:
-                # Charge attack
-                dx = player.x - self.x
-                dy = player.y - self.y
-                dist = math.sqrt(dx * dx + dy * dy) or 1
-                self.velocity_x = dx/dist * 10  # Faster charge
-                self.velocity_y = dy/dist * 10
-            elif self.attack_pattern == 1:
-                # Spawn more minions
-                actions.append('spawn_minions')
-                actions.append('spawn_minions')  # Spawn twice as many
-            elif self.attack_pattern == 2:
-                # Launch homing missile
-                if self.missile_cooldown <= 0:
-                    dx = player.x - self.x
-                    dy = player.y - self.y
-                    dist = math.sqrt(dx * dx + dy * dy)
-                    if dist > 0:
-                        self.missiles.append({
-                            'x': self.x + self.width/2,
-                            'y': self.y + self.height/2,
-                            'dx': dx/dist * 6,
-                            'dy': dy/dist * 6,
-                            'lifetime': 90,
-                            'is_fragment': False
-                        })
-                    self.missile_cooldown = 60
-            else:
-                # Spread shot with fewer bullets (3 instead of 5)
-                for i in range(3):
-                    angle = -0.3 + i * 0.3
-                    dx = math.cos(angle) * 6
-                    dy = math.sin(angle) * 6
-                    self.missiles.append({
-                        'x': self.x + self.width/2,
-                        'y': self.y + self.height/2,
-                        'dx': dx,
-                        'dy': dy,
-                        'lifetime': 60,
-                        'is_fragment': False
-                    })
-            self.attack_cooldown = 90  # Faster attack pattern
-
-        return actions
+        self.max_fragments = 32
+        self.knockback_resistance = 0.97  # Added even higher knockback resistance for final boss
+        # Update crown points for larger size
+        self.crown_points = [
+            (self.width//2 - 40, -25),  # Left point
+            (self.width//2 - 30, -40),  # Left peak
+            (self.width//2, -25),      # Middle valley
+            (self.width//2 + 30, -40),  # Right peak
+            (self.width//2 + 40, -25)   # Right point
+        ]
 
     def draw(self, screen):
-        super().draw(screen)
-        # Draw missiles
+        super().draw(screen)  # Draw the main boss and crown
+
+        # Draw missiles with special effects
         for missile in self.missiles:
             if missile['is_fragment']:
-                # Draw smaller explosion fragments
-                pygame.draw.circle(screen, (255, 200, 0), 
-                                (int(missile['x']), int(missile['y'])), 3)
+                # Draw smaller explosion fragments with glow
+                glow_radius = 6
+                for r in range(glow_radius, 0, -2):
+                    alpha = int(100 * (r / glow_radius))
+                    pygame.draw.circle(screen, (*self.color, alpha), 
+                                    (int(missile['x']), int(missile['y'])), r)
             else:
-                # Draw missiles
-                pygame.draw.circle(screen, (255, 100, 0), 
-                                (int(missile['x']), int(missile['y'])), 6)
+                # Draw missiles with trail effect
+                trail_length = 5
+                for i in range(trail_length):
+                    alpha = int(200 * ((trail_length - i) / trail_length))
+                    pos_x = int(missile['x'] - missile['dx'] * i * 0.5)
+                    pos_y = int(missile['y'] - missile['dy'] * i * 0.5)
+                    pygame.draw.circle(screen, (*self.color, alpha), (pos_x, pos_y), 6 - i)
 
 class Donkey:
     def __init__(self, x, y):
@@ -752,13 +738,13 @@ class Onion:
         self.height = 20
         self.rarity = random.choices(['white', 'blue', 'gold'], weights=[70, 25, 5])[0]
         if self.rarity == 'white':
-            self.heal_amount = 10
+            self.heal_amount = 20  # Increased from 10 to 20
             self.color = WHITE
         elif self.rarity == 'blue':
-            self.heal_amount = 25
+            self.heal_amount = 40  # Increased from 25 to 40
             self.color = LIGHT_BLUE
         else:  # gold
-            self.heal_amount = 50
+            self.heal_amount = 80  # Increased from 50 to 80
             self.color = GOLD
         self.pulse_timer = 0
         self.collected = False
@@ -803,7 +789,7 @@ class Shrek:
         self.height = 80
         self.x = WINDOW_WIDTH // 4
         self.y = WINDOW_HEIGHT // 2
-        self.speed = 5
+        self.speed = 6.5  # Increased from 5 to 6.5
         self.velocity_x = 0
         self.velocity_y = 0
         self.knockback_resistance = 0.8
@@ -823,8 +809,9 @@ class Shrek:
         self.donkey_ready_flash = 0  # New attribute for flashing effect
         self.victory_x = WINDOW_WIDTH // 2  # For victory animation
         self.victory_y = WINDOW_HEIGHT // 2
-        self.home_x = WINDOW_WIDTH * 0.75  # Shrek's home position
-        self.home_y = WINDOW_HEIGHT * 0.6
+        self.home_x = WINDOW_WIDTH * 0.85  # Updated to match house in background
+        self.home_y = WINDOW_HEIGHT * 0.45  # Updated to match house in background
+        self.poop_stain_timer = 0  # Add timer for poop stain effect
 
     def apply_knockback(self, force_x, force_y):
         self.velocity_x += force_x
@@ -867,6 +854,14 @@ class Shrek:
         if not self.donkey:
             # Draw Shrek sprite only if not riding Donkey
             screen.blit(self.current_sprite, (self.x, self.y))
+        
+        # Draw poop stain overlay if active
+        if self.poop_stain_timer > 0:
+            stain_surface = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
+            alpha = int((self.poop_stain_timer / 120) * 128)  # Fade out over 2 seconds
+            stain_surface.fill((DARK_BROWN[0], DARK_BROWN[1], DARK_BROWN[2], alpha))
+            screen.blit(stain_surface, (0, 0))
+            self.poop_stain_timer -= 1
         
         # Draw health bar with border and background
         pygame.draw.rect(screen, BLACK, (8, 8, 164, 24))  # Reduced from 204 to 164 (80 * 2 + 4 for border)
@@ -993,6 +988,24 @@ class Shrek:
             return False
         return True  # Reached home
 
+class VictoryPortal(Portal):
+    def __init__(self, x, y):
+        super().__init__(x, y)
+        self.color = (255, 165, 0)  # Orange color for victory portal
+        self.particles = []
+        self.max_radius = 60  # Smaller than boss portal
+
+    def draw(self, screen):
+        # Draw portal with orange glow
+        pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.radius)
+        pygame.draw.circle(screen, (*self.color, 128), (int(self.x), int(self.y)), self.radius + 5)
+
+        # Draw particles
+        for particle in self.particles:
+            alpha = int(255 * (particle['life'] / 30))
+            pygame.draw.circle(screen, (*self.color, alpha), 
+                             (int(particle['x']), int(particle['y'])), 2)
+
 async def main():
     clock = pygame.time.Clock()
     shrek = Shrek()
@@ -1039,7 +1052,7 @@ async def main():
     def start_wave(wave_number):
         nonlocal wave_enemies_remaining, enemy_spawn_timer, game_state, portal, boss
         if wave_number != 5 and wave_number != 10:
-            wave_enemies_remaining = wave_number * 5  # Increased from 3 to 5
+            wave_enemies_remaining = wave_number * 4  # Reduced from 5 to 4 enemies per wave level
             enemy_spawn_timer = 0
         else:
             wave_enemies_remaining = 0
@@ -1113,7 +1126,7 @@ async def main():
             start_x = WINDOW_WIDTH//2 - menu_font.size("Press SPACE to Start")[0]//2
             controls1_x = WINDOW_WIDTH//2 - menu_font.size("Movement: WASD or Arrow Keys")[0]//2
             controls2_x = WINDOW_WIDTH//2 - menu_font.size("SPACE: Use Donkey when Ready")[0]//2
-            attacks_x = WINDOW_WIDTH//2 - menu_font.size("Left Click: Punch  R: Kick  E: Fart  P: Pause")[0]//2
+            attacks_x = WINDOW_WIDTH//2 - menu_font.size("Q: Punch  R: Kick  E: Fart  P: Pause")[0]//2
             
             # Draw all menu text with outlines
             draw_outlined_text(screen, "Skibidi Shrek", title_font, title_x, WINDOW_HEIGHT//4)
@@ -1121,7 +1134,7 @@ async def main():
             draw_outlined_text(screen, "Press SPACE to Start", menu_font, start_x, WINDOW_HEIGHT//2 + 50)
             draw_outlined_text(screen, "Movement: WASD or Arrow Keys", menu_font, controls1_x, WINDOW_HEIGHT//2 + 100)
             draw_outlined_text(screen, "SPACE: Use Donkey when Ready", menu_font, controls2_x, WINDOW_HEIGHT//2 + 140)
-            draw_outlined_text(screen, "Left Click: Punch  R: Kick  E: Fart  P: Pause", menu_font, attacks_x, WINDOW_HEIGHT//2 + 180)
+            draw_outlined_text(screen, "Q: Punch  R: Kick  E: Fart  P: Pause", menu_font, attacks_x, WINDOW_HEIGHT//2 + 180)
         
         elif game_state == WAVE_ANNOUNCEMENT:
             wave_announcement_timer += 1
@@ -1180,7 +1193,7 @@ async def main():
 
             # Spawn onions
             onion_spawn_timer += 1
-            if onion_spawn_timer >= 1200:  # Spawn every 20 seconds (60 FPS * 20)
+            if onion_spawn_timer >= 600:  # Changed from 1200 to 600 (every 10 seconds instead of 20)
                 if len(onions) < 5 and shrek.health < 80:  # Only spawn if Shrek is damaged
                     x = random.randint(50, WINDOW_WIDTH - 50)
                     y = random.randint(50, WINDOW_HEIGHT - 50)
@@ -1215,28 +1228,30 @@ async def main():
 
             # Handle attacks (only if not riding Donkey)
             if not shrek.donkey:
-                # Get mouse state
-                mouse_buttons = pygame.mouse.get_pressed()
-                if mouse_buttons[0] and shrek.punch_cooldown <= 0:  # Left mouse button
+                # Get keyboard state and handle punch
+                if keys[pygame.K_q] and shrek.punch_cooldown <= 0:  # Changed from mouse_buttons[0] to keys[pygame.K_q]
                     # Allow hitting both boss and minions
                     if boss:
                         # First check boss
                         boss_hit = False
                         if abs(boss.x - shrek.x) < 120 and abs(boss.y - shrek.y) < 100:
+                            x = shrek.x + (shrek.width if shrek.facing_right else 0)
+                            shrek.attack_animations.append(AttackAnimation(x, shrek.y, 'punch', shrek.facing_right))
                             boss.health -= 15
                             boss.hit_flash = 10
                             dx = boss.x - shrek.x
                             dy = boss.y - shrek.y
                             dist = math.sqrt(dx * dx + dy * dy) or 1
-                            boss.apply_knockback(dx/dist * 20, dy/dist * 20)
+                            boss.apply_knockback(dx/dist * 5, dy/dist * 5)  # Reduced from 20 to 5
                             if boss.health <= 0:
                                 boss = None
                                 score += 1000
                                 boss_hit = True
+                            shrek.punch_cooldown = 20
                         # Then check minions
                         if not boss_hit:  # Only add score for one type of hit
                             score += shrek.punch(enemies)
-                    else:
+                    else:  # No boss, just minions
                         score += shrek.punch(enemies)
                 if keys[pygame.K_r] and shrek.kick_cooldown <= 0:
                     if boss:
@@ -1248,7 +1263,7 @@ async def main():
                             dx = boss.x - shrek.x
                             dy = boss.y - shrek.y
                             dist = math.sqrt(dx * dx + dy * dy) or 1
-                            boss.apply_knockback(dx/dist * 25, dy/dist * 25)
+                            boss.apply_knockback(dx/dist * 6, dy/dist * 6)  # Reduced from 25 to 6
                             if boss.health <= 0:
                                 boss = None
                                 score += 1000
@@ -1260,36 +1275,54 @@ async def main():
                         score += shrek.kick(enemies)
                 if keys[pygame.K_e] and shrek.fart_cooldown <= 0:
                     fart_clouds.append(FartCloud(shrek.x + shrek.width/2, shrek.y + shrek.height/2))
-                    shrek.fart_cooldown = 60
+                    shrek.fart_cooldown = 45  # Reduced from 60 to 45
 
             # Spawn enemies for normal waves
-            if current_wave != 5 and current_wave != 10 and wave_enemies_remaining > 0:  # Changed from "if current_wave < 5" to allow waves after 5
+            if current_wave != 5 and current_wave != 10 and wave_enemies_remaining > 0:
                 enemy_spawn_timer += 1
-                if enemy_spawn_timer >= 120:  # Spawn every 2 seconds
+                # Calculate spawn interval based on wave number (gets shorter in later waves)
+                spawn_interval = max(30, 120 - (current_wave * 10))  # Starts at 120, decreases by 10 each wave, minimum 30
+                if enemy_spawn_timer >= spawn_interval:
                     # Choose enemy type based on wave and random chance
                     enemy_roll = random.random()
                     if current_wave >= 7:  # More gunners in later waves
-                        if enemy_roll < 0.4:
+                        if enemy_roll < 0.25 and current_wave >= 3:  # Reduced from 0.4 to 0.25
                             new_enemy = GunnerSkibidi()
-                        elif enemy_roll < 0.8:
+                        elif enemy_roll < 0.7:  # Increased fast toilet chance
                             new_enemy = FastSkibidi()
                         else:
                             new_enemy = SkibidiToilet()
-                    elif current_wave >= 3:
-                        if enemy_roll < 0.3:
+                    elif current_wave >= 3:  # Waves 3-6
+                        if enemy_roll < 0.2:  # Reduced from 0.3 to 0.2
                             new_enemy = GunnerSkibidi()
                         elif enemy_roll < 0.6:
                             new_enemy = FastSkibidi()
                         else:
                             new_enemy = SkibidiToilet()
-                    else:
+                    else:  # Waves 1-2: no gunners
                         if enemy_roll < 0.6:
                             new_enemy = FastSkibidi()
                         else:
                             new_enemy = SkibidiToilet()
-                    new_enemy.target_player = shrek
-                    enemies.append(new_enemy)
-                    wave_enemies_remaining -= 1
+                    
+                    # Spawn multiple enemies at once in later waves
+                    enemies_per_spawn = min(3, 1 + current_wave // 4)  # Spawn more enemies at once in later waves
+                    for _ in range(enemies_per_spawn):
+                        if wave_enemies_remaining > 0:
+                            # Adjust enemy type probabilities for multiple spawns as well
+                            enemy_roll = random.random()  # New roll for each spawn
+                            if current_wave >= 7 and current_wave >= 3:
+                                new_enemy = (GunnerSkibidi() if enemy_roll < 0.25 else 
+                                          (FastSkibidi() if enemy_roll < 0.7 else SkibidiToilet()))
+                            elif current_wave >= 3:
+                                new_enemy = (GunnerSkibidi() if enemy_roll < 0.2 else 
+                                          (FastSkibidi() if enemy_roll < 0.6 else SkibidiToilet()))
+                            else:
+                                new_enemy = FastSkibidi() if enemy_roll < 0.6 else SkibidiToilet()
+                            new_enemy.target_player = shrek
+                            enemies.append(new_enemy)
+                            wave_enemies_remaining -= 1
+                    
                     enemy_spawn_timer = 0
 
             # Update enemies
@@ -1406,7 +1439,7 @@ async def main():
             # Check wave completion and victory
             if current_wave < 10 and wave_enemies_remaining == 0 and len(enemies) == 0:
                 if current_wave == 5:
-                    if not boss:  # Changed from "if current_wave == 5 and boss and boss.health <= 0" to check if boss is defeated
+                    if not boss:  # First boss defeated
                         current_wave += 1
                         score += 1000  # First boss defeat bonus
                         game_state = WAVE_ANNOUNCEMENT
@@ -1415,14 +1448,17 @@ async def main():
                     current_wave += 1
                     game_state = WAVE_ANNOUNCEMENT
                     start_wave(current_wave)
-            elif current_wave == 10 and boss and boss.health <= 0:
-                score += 2000  # Super boss defeat bonus
-                game_state = VICTORY
-                victory_timer = 0
-                victory_stage = 0
-                # Initialize victory animation
-                shrek.victory_x = shrek.x
-                shrek.victory_y = shrek.y
+            elif current_wave == 10:  # Final boss wave
+                if boss and boss.health <= 0:  # Boss just defeated
+                    boss = None
+                    score += 2000  # Super boss defeat bonus
+                elif not boss and len(enemies) == 0:  # Boss is dead and all enemies cleared
+                    game_state = VICTORY
+                    victory_timer = 0
+                    victory_stage = 0
+                    # Initialize victory animation
+                    shrek.victory_x = shrek.x
+                    shrek.victory_y = shrek.y
 
             # Draw everything
             shrek.draw(screen)
@@ -1430,6 +1466,9 @@ async def main():
                 enemy.draw(screen)
             if boss:
                 boss.draw(screen)
+            if portal:  # Make sure portal is always drawn if it exists
+                portal.update()
+                portal.draw(screen)
             for cloud in fart_clouds:
                 cloud.draw(screen)
             for onion in onions:  # Draw onions
@@ -1454,8 +1493,8 @@ async def main():
                 screen.blit(shadow, (12, 92))
                 screen.blit(text, (10, 90))
 
-            # Draw controls help (update the text to show mouse controls)
-            controls_text = font.render("Left Click: Punch  R: Kick  E: Fart", True, WHITE)
+            # Draw controls help (update text to show Q instead of Left Click)
+            controls_text = font.render("Q: Punch  R: Kick  E: Fart", True, WHITE)
             screen.blit(controls_text, (10, WINDOW_HEIGHT - 30))
 
             # Draw pause button in top right corner
@@ -1511,7 +1550,7 @@ async def main():
             resume_text = font.render("Press P to Resume", True, WHITE)
             controls_reminder = font.render("Controls:", True, WHITE)
             move_text = font.render("WASD/Arrows - Move", True, WHITE)
-            attack_text = font.render("Left Click - Punch  R - Kick  E - Fart", True, WHITE)
+            attack_text = font.render("Q - Punch  R - Kick  E - Fart", True, WHITE)
             donkey_text = font.render("Hold SPACE - Charge Donkey", True, WHITE)
 
             # Center and position all text elements
@@ -1544,14 +1583,6 @@ async def main():
                     victory_timer = 0
 
             elif victory_stage == 1:
-                # Draw Shrek's home with a darker brown to stand out against swamp
-                pygame.draw.rect(screen, (89, 39, 9), (shrek.home_x - 40, shrek.home_y - 60, 80, 60))
-                pygame.draw.polygon(screen, (89, 39, 9), [
-                    (shrek.home_x - 50, shrek.home_y - 60),
-                    (shrek.home_x + 40, shrek.home_y - 60),
-                    (shrek.home_x - 5, shrek.home_y - 100)
-                ])
-
                 # Move Shrek towards home
                 if shrek.move_towards_home():
                     victory_stage = 2
@@ -1562,14 +1593,7 @@ async def main():
                           (shrek.victory_x, shrek.victory_y))
 
             else:  # victory_stage == 2
-                # Draw home with darker brown
-                pygame.draw.rect(screen, (89, 39, 9), (shrek.home_x - 40, shrek.home_y - 60, 80, 60))
-                pygame.draw.polygon(screen, (89, 39, 9), [
-                    (shrek.home_x - 50, shrek.home_y - 60),
-                    (shrek.home_x + 40, shrek.home_y - 60),
-                    (shrek.home_x - 5, shrek.home_y - 100)
-                ])
-                # Draw Shrek
+                # Draw Shrek at final position
                 screen.blit(shrek.sprite_right, (shrek.home_x - 30, shrek.home_y - 40))
 
                 # Final message with shadow for better visibility
